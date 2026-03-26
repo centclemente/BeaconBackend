@@ -18,10 +18,15 @@ class ProgressResource extends JsonResource
             'id' => $this->id,
             'description' => $this->description,
             'raised_date' => $this->raised_date,
-            'start_date' => $this->start_date,
+            'target_date' => $this->target_date,
             'end_date' => $this->end_date,
+            'updated_by' => UserResource::make($this->whenLoaded('updatedBy')),
             'status' => $this->status,
             'remarks' => $this->remarks,
+            'created at' => $this->created_at,
+            'updated at' => $this->updated_at,
+            'deleted at' => $this->deleted_at,
+            
         ];
     }
 }

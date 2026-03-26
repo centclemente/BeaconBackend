@@ -3,7 +3,7 @@
 
 namespace App\Exports;
 
-
+use Maatwebsite\Excel\Concerns\FromArray;
 use Maatwebsite\Excel\Concerns\WithHeadings;
 use Maatwebsite\Excel\Concerns\WithStyles;
 use Maatwebsite\Excel\Concerns\WithColumnWidths;
@@ -13,8 +13,22 @@ use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
 
 
-class TemplateExport implements WithHeadings, WithStyles, WithColumnWidths
+class TemplateExport implements FromArray, WithHeadings, WithStyles, WithColumnWidths
 {
+    public function array(): array
+    {
+        return [
+            [
+                'System B',
+                'Omega, Alpha (Should Exists)',
+                'Bug (should Exists)',
+                'Another example task description',
+                'Optional remarks field',
+                '2026-03-15',
+                '2026-04-10',
+            ],
+        ];
+    }
 
 
     public function headings(): array
@@ -24,11 +38,10 @@ class TemplateExport implements WithHeadings, WithStyles, WithColumnWidths
             'Team Name',
             'Category',
             'Description',
-            'Raised Date',
-            'Start Date',
-            'Target Date',
-            'Status',
             'Remarks',
+            'Raised Date',
+            'Target Date',
+
         ];
     }
 
@@ -39,17 +52,15 @@ class TemplateExport implements WithHeadings, WithStyles, WithColumnWidths
             'B' => 20,
             'C' => 15,
             'D' => 40,
-            'E' => 15,
+            'E' => 30,
             'F' => 15,
-            'G' => 12,
-            'H' => 30,
-            'I' => 30,
+            'G' => 15,
         ];
     }
 
     public function styles(Worksheet $sheet)
     {
-        $sheet->getStyle('A1:I1')->applyFromArray([
+        $sheet->getStyle('A1:G1')->applyFromArray([
             'font' => [
                 'bold' => true,
                 'size' => 12,
@@ -71,6 +82,14 @@ class TemplateExport implements WithHeadings, WithStyles, WithColumnWidths
             ],
         ]);
 
+        $sheet->getStyle('A2:G3')->applyFromArray([
+            'borders' => [
+                'allBorders' => [
+                    'borderStyle' => Border::BORDER_THIN,
+                    'color' => ['rgb' => 'CCCCCC'],
+                ],
+            ],
+        ]);
 
         $sheet->getRowDimension(1)->setRowHeight(25);
     }

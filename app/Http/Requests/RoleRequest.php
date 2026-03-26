@@ -27,7 +27,7 @@ class RoleRequest extends FormRequest
          $roleId = $this->route('id') ?? $this->route('role');
          $isUpdated = $this->isMethod('PUT') || $this->isMethod('PATCH');
         return [
-            'name' => 'required|string|max:255' . ($isUpdated ? ',' . $roleId : ''),
+            'name' => 'required|string|max:255|unique:role,name,' . ($isUpdated ? $roleId : ''),
             'access_permissions' => ($isUpdated ? 'sometimes|' : 'required|') . 'array',
             'access_permissions.*' => 'string|distinct',
         ];

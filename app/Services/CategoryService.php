@@ -64,6 +64,10 @@ class CategoryService
 
         $trashed = $category->trashed();
 
+        if(!$trashed && $category->progress()->exists()){
+            return null;
+        }
+
         if (!$trashed) {
             $category->delete();
         } else {

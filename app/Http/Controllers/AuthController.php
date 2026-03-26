@@ -92,7 +92,7 @@ class AuthController extends Controller
     }
 
     public function ChangePassword(ChangePassRequest $request)
-    {
+    {   
         $user = $request->user();
 
         if (!Hash::check($request->current_password, $user->password)) {

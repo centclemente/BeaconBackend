@@ -19,7 +19,7 @@ class ProjectExportController extends Controller
             
             
             return Excel::download(
-                new ProjectExport($request->all()), 
+                new ProjectExport(), 
                 $fileName
             );
             

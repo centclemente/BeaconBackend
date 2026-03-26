@@ -7,103 +7,215 @@ use App\Models\Team;
 use App\Models\Systems;
 use App\Models\Category;
 use App\Models\Progress;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Str;
 use Essa\APIToolKit\Api\ApiResponse;
 use Illuminate\Support\Facades\Validator;
 use PhpOffice\PhpSpreadsheet\Shared\Date;
 use Maatwebsite\Excel\Concerns\ToCollection;
 use Maatwebsite\Excel\Concerns\WithHeadingRow;
 use Maatwebsite\Excel\Concerns\Importable;
+use Maatwebsite\Excel\Concerns\WithChunkReading;
 
 
-class Import implements ToCollection, WithHeadingRow
+class Import implements ToCollection, WithHeadingRow, WithChunkReading
 {
     use ApiResponse;
     use Importable;
-    
-    private $ExistingCategories;
-    private $ExistingTeams;
 
     private $errors = [];
+    private $duplicates = [];
+    private $existingCategories = [];
+    private $existingTeams = [];
+    private $existingSystems = [];
+    private $categories = [];
+    private $teams = [];
+    private $systems = [];
 
     public function __construct()
     {
-        $this->ExistingCategories = Category::pluck('name')->toArray();
-        $this->ExistingTeams = Team::pluck('name')->toArray();
+        $this->existingCategories = Category::pluck('id', 'name')
+            ->mapWithKeys(fn($id, $name) => [Str::lower($name) => $id])
+            ->toArray();
 
+        $this->existingTeams = Team::pluck('id', 'name')
+            ->mapWithKeys(fn($id, $name) => [Str::lower($name) => $id])
+            ->toArray();
+
+        $this->existingSystems = Systems::pluck('id', 'name')
+            ->mapWithKeys(fn($id, $name) => [Str::lower($name) => $id])
+            ->toArray();
     }
     public function collection(Collection $rows)
     {
-
-    if ($rows->isEmpty()) {
-
+        if ($rows->isEmpty()) {
             throw new \Exception(json_encode([
                 'message' => 'The uploaded file is empty.',
                 'errors' => []
             ]));
         }
+
+        $validRows = [];
+
         foreach ($rows as $index => $row) {
-            $rowNumber = $index + 2;
-            
+            $rowNumber = $index + 1;
             $data = $this->prepareRowData($row->toArray());
-            
-            $validator = Validator::make($data, $this->rules(), $this->customValidationMessages());
-            
-            if ($validator->fails()) {
+
+            if (empty($data['system_name']) && empty($data['description']) && empty($data['team_name'])) {
+                continue;
+            }
+
+            $uniqueKey = Str::lower($data['system_name']) . '|' . $data['description'] . '|' . $data['raised_date'] . '|' . Str::lower($data['category']);
+            if (in_array($uniqueKey, $this->duplicates)) {
                 $this->errors[] = [
                     'row' => $rowNumber,
-                    'errors' => $validator->errors()->toArray(),
+                    'errors' => ['duplicate' => ['This row is a duplicate']],
                     'values' => $data
-                ];
+                ];  
+                continue;
+            }
+            $this->duplicates[] = $uniqueKey;
+
+            if ($this->validateRow($data, $rowNumber)) {
+                $validRows[] = $data;
             }
         }
 
-
         if (!empty($this->errors)) {
             throw new \Exception(json_encode([
-                'message' => 'Validation failed for multiple rows',
+                'message' => 'Validation: Failed to Upload File',
                 'errors' => $this->errors
             ]));
         }
 
-       
-        foreach ($rows as $row) {
-            $data = $this->prepareRowData($row->toArray());
-            
-           
-            $team = Team::where('name', $data['team_name'])->first();
-           $category = Category::where('name', $data['category'])->first();
-           
-            $system = Systems::firstOrCreate(
-            ['name' => $data['system_name']],
-            ['team_id' => $team->id]
-        );
-            
-            Progress::create([
-                "description" => $data['description'],
-                "raised_date" => $data['raised_date'],
-                "target_date" => $data['target_date'],
-                "end_date" => $data['end_date'],
-                "status" => $data['status'] ?? 'pending',
-                "remarks" => $data['remarks'],
-                "category_id" => $category->id,
-                "system_id" => $system->id
-            ]);
-        }
+        DB::transaction(function () use ($validRows) {
+            foreach ($validRows as $data) {
+                $this->storeRow($data);
+            }
+        });
     }
 
-    protected function prepareRowData($row)
+    protected function validateRow($data, $rowNumber)
+    {
+        $validator = Validator::make($data, $this->rules(), $this->customValidationMessages());
+
+        if (!empty($data['system_name'])) {
+            $systemKey = Str::lower($data['system_name']);
+            if (!isset($this->existingSystems[$systemKey])) {
+                $validator->errors()->add('System Name', 'The system does not exist.');
+            }
+        }
+
+        if (!empty($data['category'])) {
+            $categoryKey = Str::lower($data['category']);
+            if (!isset($this->existingCategories[$categoryKey])) {
+                $validator->errors()->add('Category', 'The category does not exist.');
+            }
+        }
+
+        if (!empty($data['team_name'])) {
+            $teamKeys = $this->extractTeams($data['team_name']);
+            $missingTeams = array_diff($teamKeys, array_keys($this->existingTeams));
+
+            if (!empty($missingTeams)) {
+                $validator->errors()->add('Team Name ', 'The following teams do not exist: ' . implode(', ', $missingTeams));
+            }
+
+            if (!empty($data['system_name'])) {
+                $systemKey = Str::lower($data['system_name']);
+                if (isset($this->existingSystems[$systemKey])) {
+                    $systemId = $this->existingSystems[$systemKey];
+                    $requestedTeamIds = array_values(array_intersect_key($this->existingTeams, array_flip($teamKeys)));
+                    
+                    $taggedTeamIds = Systems::find($systemId)
+                        ->team()
+                        ->pluck('team_id')
+                        ->toArray();
+
+                    $untaggedTeamIds = array_diff($requestedTeamIds, $taggedTeamIds);
+
+                    if (!empty($untaggedTeamIds)) {
+                        $untaggedTeamNames = Team::whereIn('id', $untaggedTeamIds)
+                            ->pluck('name')
+                            ->toArray();
+                        $validator->errors()->add('Team Name', 'The system is not tagged to these teams: ' . implode(', ', $untaggedTeamNames));
+                    }
+                }
+            }
+        }
+
+        if (!empty($data['system_name']) && !empty($data['description']) && !empty($data['raised_date'])) {
+            $systemKey = Str::lower($data['system_name']);
+            if (isset($this->existingSystems[$systemKey])) {
+                $systemId = $this->existingSystems[$systemKey];
+                $categoryId = $this->existingCategories[Str::lower($data['category'])] ?? null;
+                $duplicate = Progress::where('system_id', $systemId)
+                    ->where('category_id', $categoryId)    
+                    ->where('description', $data['description'])
+                    ->where('raised_date', $data['raised_date'])
+                    ->exists();
+
+                if ($duplicate) {
+                    $validator->errors()->add('description', 'This progress record already exists for this system.');
+                }
+            }
+        }
+
+        if ($validator->errors()->isNotEmpty()) {
+            $this->errors[] = [
+                'row' => $rowNumber,
+                'errors' => $validator->errors()->toArray(),
+                'values' => $data
+            ];
+            return false;
+        }
+
+        return true;
+    }
+
+    protected function storeRow($data)
+    {
+        $systemKey = Str::lower($data['system_name']);
+        $categoryKey = Str::lower($data['category']);
+        $teamKeys = $this->extractTeams($data['team_name']);
+
+        $systemId = $this->existingSystems[$systemKey];
+        $categoryId = $this->existingCategories[$categoryKey];
+        $teamIds = array_values(array_intersect_key($this->existingTeams, array_flip($teamKeys)));
+
+        $system = Systems::find($systemId);
+        $system->team()->syncWithoutDetaching($teamIds);
+
+        Progress::create([
+            'description' => $data['description'],
+            'raised_date' => $data['raised_date'],
+            'target_date' => $data['target_date'],
+            'status' => $data['status'] ?? 'pending',
+            'remarks' => $data['remarks'],
+            'category_id' => $categoryId,
+            'system_id' => $systemId
+        ]);
+    }
+
+    protected function extractTeams($teamString)
+    {
+        return collect(explode(',', $teamString))
+            ->map(fn($team) => Str::lower(trim($team)))
+            ->toArray();
+    }
+
+    public function prepareRowData($row)
     {
         return [
             'system_name' => $row['system_name'] ?? null,
-            'team_name' => $row['team'] ?? null,
+            'team_name' => $row['team_name'] ?? null,
             'category' => $row['category'] ?? null,
             'description' => $row['description'] ?? null,
             'raised_date' => $this->transformDate($row['raised_date'] ?? null),
             'target_date' => $this->transformDate($row['target_date'] ?? null),
-            'end_date' => $this->transformDate($row['end_date'] ?? null),
-            'status' => $row['status'] ?? 'pending',
+            'status' => !empty($row['status']) ? Str::lower($row['status']) : 'pending',
             'remarks' => $row['remarks'] ?? null,
         ];
     }
@@ -127,34 +239,35 @@ class Import implements ToCollection, WithHeadingRow
     {
         return [
             'system_name' => 'required|string|max:255',
-            'category' => 'required|string|max:255|exists:category,name',
-            'team_name' => 'required|string|max:255|exists:teams,name',
-            'description' => [
-                'required','string','max:500',Rule::unique('progress', 'description')
-            ],
+            'team_name' => 'required|string',
+            'category' => 'required|max:255',
+            'description' => 'required|max:500',
             'raised_date' => 'required|date',
             'target_date' => 'required|date',
-            'end_date' => 'nullable|date|after_or_equal:raised_dates ',
             'status' => ['nullable', Rule::in(['pending', 'hold', 'done'])],
             'remarks' => 'nullable|string|max:1000',
         ];
     }
-
     public function customValidationMessages()
     {
         return [
-            'category.exists' => 'The category does not exist.',
-            'description.unique' => 'The Description already exist',
-            'team_name.exists' => 'The Team does not exist.',
-            'raised_date.date' => 'The Raised Date must be a valid date.',
-            'target_date.date' => 'The Target Date must be a valid date.',
-            'end_date.date' => 'The End Date must be a valid date.',
-            'end_date.after_or_equal' => 'The End Date must be after or equal to the Raised Date.',
+            'system_name.required' => 'The system name field is required.',
+            'team_name.required' => 'The team name field is required.',
+            'category.required' => 'The category field is required.',
+            'description.required' => 'The description field is required.',
+            'raised_date.required' => 'The raised date field is required.',
+            'target_date.required' => 'The target date field is required.',
+            'status.in' => 'The status must be one of the following: pending, hold, done.',
         ];
     }
 
     public function getErrors()
     {
         return $this->errors;
+    }
+
+    public function chunkSize(): int
+    {
+        return 500;
     }
 }

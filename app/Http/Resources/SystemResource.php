@@ -15,16 +15,17 @@ class SystemResource extends JsonResource
             $category = $progressItems->first()->category;
             
             return [
-                'categoryName' => $category->name,
+                'categoryName' => $category->name?? NULL,
                 'progress' => ProgressResource::collection($progressItems)
             ];
         })->values();
 
         return [
+            'id' => $this->id,
             'systemName' => $this->name,
             'created_at' => $this->created_at->toDateTimeString(),
             'updated_at' => $this->updated_at->toDateTimeString(),
-            'team' => new TeamResource($this->team),
+            'team' => TeamResource::collection($this->whenLoaded('team')),
             'categories' => $categories
         ];
     }

@@ -53,7 +53,7 @@ class CategoryController extends Controller
 
 
         if (!$category) {
-            return $this->responseNotFound(__('messages.not_found', ['module' => 'User']));
+            return $this->responseUnprocessable("Cannot archive category with associated systems. Please remove or reassign those systems first.");
         }
 
         $message = $category->trashed()

@@ -65,14 +65,27 @@ class TeamService
     {
 
         $team = Team::withTrashed()->find($id);
-        $validated = $data;
 
-        if(!$team){
+        if (!$team) {
             return null;
         }
 
-        $team->update($validated);
+        $team->update($data);
 
+        if (isset($data['add_systems'])) {
+            $team->systems()->syncWithoutDetaching($data['add_systems']);
+        }
+
+       
+        if (isset($data['remove_systems'])) {
+            $team->systems()->detach($data['remove_systems']);
+        }
+
+        if (isset($data['system_ids'])) {
+            $team->systems()->sync($data['system_ids']);
+        }
+
+        $team->load('systems');
         return $team;
     }
 
@@ -86,7 +99,7 @@ class TeamService
             $team->restore();
         } else {
             $team->delete();
-        }   
+        }
         return $team;
     }
 }

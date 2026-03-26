@@ -19,23 +19,17 @@ class RoleSeeder extends Seeder
             [
                 "name" => "Admin",
                 "access_permissions" =>([
-                    "manage_users",
-                    "manage_roles",
-                    "import",
-                    "manage_status",
-                    "manage_teams",
-                    "manage_charging",
+                    "Dashboard",
+                    "Masterlist",
+                    "Users",
+                    "Role",
+                    "Charging",
+                    "Team",
+                    "Category",
+                    "Systems",
                 ]),
             ],
-            [
-                "name" => "User",
-                "access_permissions" => ([
-                    "view_systems",
-                    "view_progress",
-                    "export",
-                    "import",
-                ]),
-            ],
+            
         ];
 
         foreach ($roles as $role) {

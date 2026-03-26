@@ -27,20 +27,24 @@ use App\Http\Controllers\ExportTemplateController;
 */
 Route::middleware("auth:sanctum")->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
-    Route::apiResource('/charging', ChargingController::class);
+
     Route::apiResource('/role', RoleController::class);
-    Route::apiResource('/team', TeamController::class);
+    Route::apiResource('/team', TeamController::class); 
     Route::apiResource('/user', UserController::class);
     Route::apiResource('/category', CategoryController::class);
     Route::apiResource('/systems', SystemsController::class);
-    Route::apiResource('/progress', ProgressController::class);
+    Route::get('/progress', [ProgressController::class, 'index']);
+    Route::post('/progress', [ProgressController::class, 'store']);
+    Route::get('/progress/{id}', [ProgressController::class, 'show']);
+    Route::put('/progress', [ProgressController::class, 'update']); 
+    Route::get('/compute_per_team/{teamId}', [ProgressController::class, 'compute_per_team']);
+    Route::post('/sync_charging', [ChargingController::class, 'sync_charging']);
     Route::get('/export_template', [ExportTemplateController::class, 'export']);
     Route::get('/export', [ProjectExportController::class, 'export']);
     Route::post('/import', [ImportController::class, 'import']);
     Route::put('/change_password', [AuthController::class, 'changePassword']);
     Route::patch('/reset_password/{id} ', [AuthController::class, 'resetPassword']);
 });
-
 
 
 Route::post('/register', [AuthController::class, 'register']);

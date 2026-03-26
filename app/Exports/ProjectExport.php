@@ -24,41 +24,21 @@ class ProjectExport implements FromCollection, WithMapping, WithHeadings, WithSt
 
     public function collection()
     {
-        $query = Progress::with(['category', 'systems']);
-
-        if (isset($this->filters['status'])) {
-            $query->where('status', $this->filters['status']);
-        }
-
-        if (isset($this->filters['category_id'])) {
-            $query->where('category_id', $this->filters['category_id']);
-        }
-
-        if (isset($this->filters['system_id'])) {
-            $query->where('system_id', $this->filters['system_id']);
-        }
-
-        if (isset($this->filters['month'])) {
-            $query->whereMonth('raised_date', $this->filters['month']);
-        }
-
-        if (isset($this->filters['year'])) {
-            $query->whereYear('raised_date', $this->filters['year']);
-        }
-
-
-        return $query->orderBy('created_at', 'desc')->get();
+        return Progress::with(['systems.team', 'category'])
+            ->useFilters()
+            ->get();
     }
 
     public function map($progress): array
     {
         return [
             $progress->systems ? $progress->systems->name : 'N/A',
+            $progress->systems && $progress->systems->team ? $progress->systems->team->pluck('name')->join(', ') : 'N/A',
             $progress->category ? $progress->category->name : 'N/A',
             $progress->description ?? '',
             $progress->raised_date ?? '',
-            $progress->start_date ?? '',
             $progress->target_date ?? '',
+            $progress->end_date ?? '',
             $progress->status ?? '',
             $progress->remarks ?? '',
         ];
@@ -68,10 +48,11 @@ class ProjectExport implements FromCollection, WithMapping, WithHeadings, WithSt
     {
         return [
             'System Name',
+            'Team Name',
             'Category',
             'Description',
+            'Remarks',
             'Raised Date',
-            'Start Date',
             'Target Date',
             'Status',
             'Remarks',
@@ -84,17 +65,18 @@ class ProjectExport implements FromCollection, WithMapping, WithHeadings, WithSt
             'B' => 20,
             'C' => 40,
             'D' => 15,
-            'E' => 15,
+            'E' => 30,
             'F' => 15,
-            'G' => 12,
-            'H' => 30,
+            'G' => 15,
+            'H' => 15,
+            'I' => 30,
         ];
     }
 
     public function styles(Worksheet $sheet)
     {
-        // Style the header row
-        $sheet->getStyle('A1:H1')->applyFromArray([
+        
+        $sheet->getStyle('A1:I1')->applyFromArray([
             'font' => [
                 'bold' => true,
                 'size' => 12,

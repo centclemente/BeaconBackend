@@ -54,6 +54,8 @@ class TeamController extends Controller
             return $this->responseNotFound(__('messages.not_found', ['module' => 'Team']));
         }
 
+     
+
         return $this->responseSuccess(__('messages.updated', ['module' => 'Team']), new TeamResource($team));
 
     }
@@ -72,9 +74,7 @@ class TeamController extends Controller
             : __('messages.restored', ['module' => 'Team']);
 
         return $this->responseSuccess($message, new TeamResource($teams));
-
-                
-
-
     }
+
+
     }

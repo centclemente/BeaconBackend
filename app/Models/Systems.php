@@ -20,12 +20,16 @@ class Systems extends Model
     protected $fillable = [
         'name',
         'code',
-        'team_id'
     ];
 
     public function team()
     {
-        return $this->belongsTo(Team::class);
+     return $this->belongsToMany(
+        Team::class,          
+        'system_team',        
+        'system_id',         
+        'team_id'             
+    );
     }
 
     public function progress()

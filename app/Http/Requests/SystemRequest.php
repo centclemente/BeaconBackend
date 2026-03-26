@@ -25,11 +25,15 @@ class SystemRequest extends FormRequest
     public function rules()
     {
          return [
-            'system_name' => 'required|string|max:255',
-            'team_id' => [
-                'required',
-                'string',
-                Rule::exists('teams', 'id')->whereNull('deleted_at')
+           'system_name' => [
+            'required',
+            'string',
+            'max:255',
+        ],  
+            'team_id' => 'required|array',
+            'team_id.*' => [
+            'required',
+            Rule::exists('teams', 'id')->whereNull('deleted_at')
             ],
         ];
     }
